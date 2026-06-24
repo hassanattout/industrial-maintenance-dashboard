@@ -310,37 +310,57 @@ def get_mechanism_group(time_class, load_class):
 
 
 def get_recommendation(ifm, hresid=None, hu=None):
+    """
+    Recommandation aligned with the methodology page and the IFm chart:
+    - IFm < 0.50: Normal
+    - 0.50 <= IFm < 0.75: Surveillance
+    - 0.75 <= IFm < 1.00: Critique
+    - IFm >= 1.00 or no residual life: Urgent
+
+    hresid is expressed in hours. It is only used as an additional urgent flag
+    when the remaining theoretical life is zero or negative.
+    """
     try:
+        if ifm is None:
+            return "Données insuffisantes"
+
         ifm = float(ifm)
         hresid = float(hresid) if hresid is not None else None
 
-        if ifm >= 1 or (hresid is not None and hresid <= 0):
-            return "🔴 Arrêt immédiat / remplacement requis"
-        if ifm >= 0.85 or (hresid is not None and hresid <= 5):
-            return "🟠 Action prioritaire / surveillance renforcée"
-        if ifm >= 0.60 or (hresid is not None and hresid <= 10):
-            return "🟡 Maintenance préventive recommandée"
-        return "🟢 Fonctionnement acceptable"
+        if ifm >= 1.00 or (hresid is not None and hresid <= 0):
+            return "🔴 Analyse immédiate : limite théorique atteinte ou durée résiduelle nulle"
+        if ifm >= 0.75:
+            return "🟠 EVS / expertise à planifier prioritairement"
+        if ifm >= 0.50:
+            return "🟡 Surveillance renforcée et suivi rapproché"
+        return "🟢 Surveillance périodique standard"
+
     except Exception:
         return "Données insuffisantes"
 
 
 def get_status(ifm, hresid=None):
+    """
+    Status aligned with the methodology page, the IFm chart, and the defense script.
+    The status is a decision-support indicator, not a certified aptitude decision.
+    """
     try:
-        ifm = float(ifm)
-        hresid = float(hresid) if hresid is not None else 100
+        if ifm is None:
+            return "Inconnu", "badge-normal", COLORS["grey"]
 
-        if ifm >= 1 or hresid <= 0:
-            return "Critique", "badge-urgent", COLORS["red"]
-        if ifm >= 0.85 or hresid <= 5:
-            return "Surveillance", "badge-critical", COLORS["orange"]
-        if ifm >= 0.60 or hresid <= 10:
-            return "Préventif", "badge-watch", COLORS["yellow"]
-        return "Suffisant", "badge-normal", COLORS["green"]
+        ifm = float(ifm)
+        hresid = float(hresid) if hresid is not None else None
+
+        if ifm >= 1.00 or (hresid is not None and hresid <= 0):
+            return "Urgent", "badge-urgent", COLORS["red"]
+        if ifm >= 0.75:
+            return "Critique", "badge-critical", COLORS["orange"]
+        if ifm >= 0.50:
+            return "Surveillance", "badge-watch", COLORS["yellow"]
+        return "Normal", "badge-normal", COLORS["green"]
 
     except Exception:
         return "Inconnu", "badge-normal", COLORS["grey"]
-
 
 def format_euro(value):
     if pd.isna(value) or value == 0:
@@ -443,6 +463,41 @@ def apply_global_style():
         color: #cdd6f4;
         margin-top: 28px;
         margin-bottom: 26px;
+    }}
+
+
+    .badge-normal, .badge-watch, .badge-critical, .badge-urgent {{
+        display: inline-block;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        border: 1px solid transparent;
+        white-space: nowrap;
+    }}
+
+    .badge-normal {{
+        background: rgba(166, 227, 161, 0.14);
+        color: #a6e3a1;
+        border-color: rgba(166, 227, 161, 0.35);
+    }}
+
+    .badge-watch {{
+        background: rgba(249, 226, 175, 0.14);
+        color: #f9e2af;
+        border-color: rgba(249, 226, 175, 0.35);
+    }}
+
+    .badge-critical {{
+        background: rgba(250, 179, 135, 0.14);
+        color: #fab387;
+        border-color: rgba(250, 179, 135, 0.35);
+    }}
+
+    .badge-urgent {{
+        background: rgba(243, 139, 168, 0.14);
+        color: #f38ba8;
+        border-color: rgba(243, 139, 168, 0.35);
     }}
     </style>
     """
