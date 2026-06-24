@@ -248,7 +248,7 @@ for tab, (key, label) in zip(tabs, mecas):
         ifm = pi_r / pi_c if pi_c > 0 else None
 
         hresid = calc_hresid(R, pi_c, pi_r, Kmf)
-        status, badge_cls, status_color = get_status(ifm)
+        status, badge_cls, status_color = get_status(ifm, hresid)
         annees = hresid / hu if hresid is not None and hu > 0 else None
 
         inputs[key] = {
@@ -322,11 +322,13 @@ df_res = pd.DataFrame(rows)
 def color_status(val):
     mapping = {
         "Normal": "background:#1a3a1a;color:#a6e3a1",
+        "Suffisant": "background:#1a3a1a;color:#a6e3a1",
         "Surveillance": "background:#3a3010;color:#f9e2af",
+        "Préventif": "background:#3a3010;color:#f9e2af",
         "Critique": "background:#3a1a0a;color:#fab387",
         "Urgent": "background:#3a0a0a;color:#f38ba8",
         "Épuisé": "background:#3a0a0a;color:#f38ba8",
-        "Suffisant": "background:#1a3a1a;color:#a6e3a1",
+        "Inconnu": "background:#2a2e3f;color:#9aa3b8",
     }
     return mapping.get(val, "")
 
