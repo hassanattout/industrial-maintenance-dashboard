@@ -22,7 +22,7 @@ The application was designed to make industrial equipment information easier to:
 - visualise CAPEX/OPEX planning;
 - support technical assessment of overhead cranes.
 
-## What I worked on
+## My contribution
 
 I developed the Python and application side of the project, including:
 
