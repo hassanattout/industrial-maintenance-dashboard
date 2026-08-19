@@ -1,4 +1,4 @@
-# EVS Dashboard
+# Industrial Maintenance Dashboard
 
 **Industrial maintenance, technical assessment, and investment-planning dashboard for overhead cranes**
 
@@ -101,17 +101,18 @@ This allows the application to combine software-based data processing with indus
 ## Repository structure
 
 ```text
-evs-dashboard-renault/
+industrial-maintenance-dashboard/
 ├── Accueil.py                  # Streamlit entry point
 ├── utils.py                    # Shared data-processing and engineering utilities
 ├── requirements.txt            # Python dependencies
-├── pages/
-│   ├── 1_Vue_densemble.py      # Fleet overview and KPI analysis
-│   ├── 2_Priorisation.py       # Equipment prioritisation
-│   ├── 3_Fiche_Pont.py         # Individual overhead-crane view
-│   ├── 4_Calculateur_IFm.py    # Engineering calculator
-│   └── 5_Methodologie.py       # Assessment methodology
-└── data/                        # Project data resources
+├── README.md
+├── .gitignore
+└── pages/
+    ├── 1_Vue_densemble.py      # Fleet overview and KPI analysis
+    ├── 2_Priorisation.py       # Equipment prioritisation
+    ├── 3_Fiche_Pont.py         # Individual overhead-crane view
+    ├── 4_Calculateur_IFm.py    # Engineering calculator
+    └── 5_Methodologie.py       # Assessment methodology
 ```
 
 ## Running the application locally
@@ -119,8 +120,8 @@ evs-dashboard-renault/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/hassanattout/evs-dashboard-renault.git
-cd evs-dashboard-renault
+git clone https://github.com/hassanattout/industrial-maintenance-dashboard.git
+cd industrial-maintenance-dashboard
 ```
 
 ### 2. Create a virtual environment
