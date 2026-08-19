@@ -1,10 +1,14 @@
 # Industrial Maintenance Dashboard
 
-**Industrial maintenance, technical assessment, and investment-planning dashboard for overhead cranes**
+**Python and Streamlit dashboard for industrial maintenance, overhead-crane assessment, CAPEX/OPEX planning, and engineering decision support.**
 
-This project is a Python and Streamlit application developed during my apprenticeship at **Renault Group** to improve the way overhead-crane maintenance and engineering data is consolidated, analysed, and presented.
+[Live Streamlit app](https://industrial-maintenance-dashboard.streamlit.app)
+
+This project was developed during my apprenticeship at **Renault Group** to improve how overhead-crane maintenance and engineering data is consolidated, analysed, prioritised, and presented.
 
 The original information was distributed across Excel-based sources and required significant manual interpretation. The dashboard provides a single interface for importing the equipment dataset, cleaning and structuring it, calculating engineering indicators, and presenting the results to maintenance and technical teams.
+
+![Dashboard overview](screenshots/dashboard-overview.png)
 
 ## Project objective
 
@@ -27,7 +31,7 @@ I developed the Python and application side of the project, including:
 - equipment, site, and country-level aggregation;
 - maintenance and budget calculations;
 - Streamlit application architecture;
-- interactive visualisations and KPI dashboards;
+- interactive Plotly visualisations and KPI dashboards;
 - engineering calculation utilities;
 - presentation of results for technical users.
 
@@ -61,19 +65,25 @@ The overview page presents high-level indicators including:
 
 It also provides interactive visualisations for equipment distribution, EVS status, CAPEX/OPEX planning, and site-level budget analysis.
 
-### 3. Prioritisation
+### 3. Budget planning by site and year
+
+The dashboard includes a site-by-year heatmap to make high-investment periods and locations immediately visible for planning and prioritisation.
+
+![Budget heatmap](screenshots/budget-heatmap.png)
+
+### 4. Prioritisation
 
 A dedicated page supports the prioritisation of equipment and engineering actions using the processed technical dataset.
 
-### 4. Individual crane view
+### 5. Individual crane view
 
 The application includes a dedicated equipment page for reviewing information at individual overhead-crane level.
 
-### 5. IFm engineering calculator
+### 6. IFm engineering calculator
 
 A dedicated calculation page supports engineering assessment using the project methodology.
 
-### 6. Methodology
+### 7. Methodology
 
 The application contains a methodology page explaining the engineering logic used in the assessment process.
 
@@ -104,9 +114,13 @@ This allows the application to combine software-based data processing with indus
 industrial-maintenance-dashboard/
 ├── Accueil.py                  # Streamlit entry point
 ├── utils.py                    # Shared data-processing and engineering utilities
+├── Capex pont Roadmap.xlsx     # Fleet dataset used by the application
 ├── requirements.txt            # Python dependencies
 ├── README.md
 ├── .gitignore
+├── screenshots/
+│   ├── dashboard-overview.png
+│   └── budget-heatmap.png
 └── pages/
     ├── 1_Vue_densemble.py      # Fleet overview and KPI analysis
     ├── 2_Priorisation.py       # Equipment prioritisation
@@ -114,6 +128,10 @@ industrial-maintenance-dashboard/
     ├── 4_Calculateur_IFm.py    # Engineering calculator
     └── 5_Methodologie.py       # Assessment methodology
 ```
+
+## Try the deployed application
+
+Open the [Streamlit deployment](https://industrial-maintenance-dashboard.streamlit.app), then upload `Capex pont Roadmap.xlsx` from this repository through the application interface.
 
 ## Running the application locally
 
@@ -154,7 +172,7 @@ pip install -r requirements.txt
 streamlit run Accueil.py
 ```
 
-Then import the expected Excel fleet file through the application interface.
+Then import the Excel fleet file through the application interface.
 
 ## Why this project matters
 
