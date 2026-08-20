@@ -174,6 +174,26 @@ streamlit run Accueil.py
 
 Then import the Excel fleet file through the application interface.
 
+## Input validation
+
+The dashboard accepts `.xlsx` workbooks up to 20 MB. It prefers a sheet named
+`Ponts`, reads the column header from row 10, and checks that the normalized
+equipment, country, site, age, and EVS-status fields are present. Invalid files
+are rejected with a clear message instead of producing partial calculations.
+
+## Automated checks
+
+GitHub Actions runs the test suite on Python 3.11 for every pull request and
+every push to `main`. Run the same checks locally with:
+
+```bash
+python -m compileall -q Accueil.py utils.py pages tests
+pytest -q
+```
+
+Engineering calculation helpers reject invalid capacities and classifications
+instead of silently returning plausible default results.
+
 ## Why this project matters
 
 The project demonstrates how Python can be used as an engineering tool rather than only as a software-development language. It combines:
