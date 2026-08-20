@@ -2,9 +2,18 @@ import json
 import inspect
 from pathlib import Path
 from io import BytesIO
+from zipfile import is_zipfile
 
 import pandas as pd
 import streamlit as st
+
+
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+REQUIRED_NORMALIZED_COLUMNS = {"pays", "site", "pont", "age", "evs_statut"}
+
+
+class DataValidationError(ValueError):
+    """Raised when an uploaded fleet workbook does not match the expected schema."""
 
 
 COLORS = {
@@ -77,7 +86,14 @@ def upload_excel_center():
     )
 
     if uploaded_file is not None:
-        st.session_state["uploaded_excel_bytes"] = uploaded_file.getvalue()
+        uploaded_bytes = uploaded_file.getvalue()
+        try:
+            validate_excel_upload(uploaded_file.name, uploaded_bytes)
+        except DataValidationError as exc:
+            st.error(str(exc))
+            return
+
+        st.session_state["uploaded_excel_bytes"] = uploaded_bytes
         st.session_state["uploaded_excel_name"] = uploaded_file.name
         st.success(f"Fichier chargé : {uploaded_file.name}")
         st.rerun()
@@ -96,7 +112,15 @@ def get_uploaded_excel():
 
 
 def detect_sheet_name(excel_file):
-    xls = pd.ExcelFile(excel_file)
+    try:
+        xls = pd.ExcelFile(excel_file, engine="openpyxl")
+    except Exception as exc:
+        raise DataValidationError(
+            "Le fichier Excel ne peut pas être lu. Vérifiez qu'il s'agit d'un fichier .xlsx valide."
+        ) from exc
+
+    if not xls.sheet_names:
+        raise DataValidationError("Le fichier Excel ne contient aucune feuille.")
 
     if "Ponts" in xls.sheet_names:
         return "Ponts"
@@ -107,11 +131,43 @@ def detect_sheet_name(excel_file):
 def read_excel_file(excel_file):
     sheet_name = detect_sheet_name(excel_file)
 
-    return pd.read_excel(
-        excel_file,
-        sheet_name=sheet_name,
-        header=9,
-    )
+    if hasattr(excel_file, "seek"):
+        excel_file.seek(0)
+
+    try:
+        return pd.read_excel(
+            excel_file,
+            sheet_name=sheet_name,
+            header=9,
+            engine="openpyxl",
+        )
+    except Exception as exc:
+        raise DataValidationError(
+            f"La feuille '{sheet_name}' ne peut pas être analysée avec l'en-tête attendu à la ligne 10."
+        ) from exc
+
+
+def validate_excel_upload(file_name, file_bytes):
+    if not str(file_name).lower().endswith(".xlsx"):
+        raise DataValidationError("Seuls les fichiers .xlsx sont acceptés.")
+    if not file_bytes:
+        raise DataValidationError("Le fichier Excel est vide.")
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise DataValidationError(
+            f"Le fichier dépasse la limite de {limit_mb} Mo."
+        )
+    if not is_zipfile(BytesIO(file_bytes)):
+        raise DataValidationError("Le contenu du fichier n'est pas un classeur .xlsx valide.")
+
+
+def validate_normalized_columns(df):
+    missing = sorted(REQUIRED_NORMALIZED_COLUMNS.difference(df.columns))
+    if missing:
+        raise DataValidationError(
+            "Colonnes obligatoires manquantes après normalisation : "
+            + ", ".join(missing)
+        )
 
 
 def clean_text_col(series):
@@ -143,7 +199,11 @@ def load_data():
     uploaded_file = get_uploaded_excel()
 
     if uploaded_file is not None:
-        df = read_excel_file(uploaded_file)
+        try:
+            df = read_excel_file(uploaded_file)
+        except DataValidationError as exc:
+            st.error(str(exc))
+            st.stop()
 
     else:
         st.error("Aucun fichier Excel importé.")
@@ -177,6 +237,11 @@ def load_data():
     }
 
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+    try:
+        validate_normalized_columns(df)
+    except DataValidationError as exc:
+        st.error(str(exc))
+        st.stop()
 
     if "pont" in df.columns:
         df = df[df["pont"].notna()]
@@ -259,54 +324,53 @@ def load_data():
 
 
 def calc_ifm(*args):
-    try:
-        if len(args) == 2:
-            pi_r, pi_c = args
-            pi_r = float(pi_r)
-            pi_c = float(pi_c)
-            return round(pi_r / pi_c, 3) if pi_c > 0 else 0
+    if len(args) == 2:
+        pi_r, pi_c = map(float, args)
+        if pi_r < 0 or pi_c <= 0:
+            raise ValueError("pi_r must be non-negative and pi_c must be positive")
+        return round(pi_r / pi_c, 3)
 
-        if len(args) == 4:
-            hr, kmr, hc, kmc = map(float, args)
-            pi_r = hr * kmr
-            pi_c = hc * kmc
-            ifm = pi_r / pi_c if pi_c > 0 else 0
-            return round(ifm, 3), pi_r, pi_c
+    if len(args) == 4:
+        hr, kmr, hc, kmc = map(float, args)
+        if hr < 0 or kmr < 0 or hc <= 0 or kmc <= 0:
+            raise ValueError(
+                "hr and kmr must be non-negative; hc and kmc must be positive"
+            )
+        pi_r = hr * kmr
+        pi_c = hc * kmc
+        return round(pi_r / pi_c, 3), pi_r, pi_c
 
-    except Exception:
-        pass
-
-    return 0
+    raise TypeError("calc_ifm expects either 2 or 4 numeric arguments")
 
 
 def calc_hresid(*args):
-    try:
-        if len(args) == 3:
-            pi_r, pi_c, kmf = map(float, args)
-            if pi_c <= 0 or kmf <= 0:
-                return 100.0
-            return max(0, round((1 - (pi_r / (pi_c * kmf))) * 100, 1))
+    if len(args) == 3:
+        pi_r, pi_c, kmf = map(float, args)
+        if pi_r < 0 or pi_c <= 0 or kmf <= 0:
+            raise ValueError("pi_r must be non-negative; pi_c and kmf must be positive")
+        return max(0, round((1 - (pi_r / (pi_c * kmf))) * 100, 1))
 
-        if len(args) == 4:
-            r, pi_c, pi_r, kmf = map(float, args)
-            if kmf <= 0:
-                return None
-            return max(0, round((r * pi_c - pi_r) / kmf, 1))
+    if len(args) == 4:
+        r, pi_c, pi_r, kmf = map(float, args)
+        if r < 0 or pi_c <= 0 or pi_r < 0 or kmf <= 0:
+            raise ValueError(
+                "r and pi_r must be non-negative; pi_c and kmf must be positive"
+            )
+        return max(0, round((r * pi_c - pi_r) / kmf, 1))
 
-    except Exception:
-        pass
-
-    return 0.0
+    raise TypeError("calc_hresid expects either 3 or 4 numeric arguments")
 
 
 def get_mechanism_group(time_class, load_class):
+    t_code = str(time_class).split()[0].replace("(", "").strip()
+    l_code = str(load_class).split()[0].replace("(", "").strip()
     try:
-        t_code = str(time_class).split()[0].replace("(", "").strip()
-        l_code = str(load_class).split()[0].replace("(", "").strip()
-        t_index = int(t_code.replace("T", ""))
+        t_index = int(t_code.removeprefix("T"))
         return MECHANISM_GROUP_MATRIX[l_code][t_index]
-    except Exception:
-        return "M1"
+    except (KeyError, ValueError, IndexError) as exc:
+        raise ValueError(
+            f"Invalid FEM classification: time={time_class!r}, load={load_class!r}"
+        ) from exc
 
 
 def get_recommendation(ifm, hresid=None, hu=None):
