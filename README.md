@@ -127,7 +127,12 @@ The scenario page reports:
 - selected cost;
 - scenario risk-points reduced;
 - cost source for each asset;
-- mandatory queue kept outside the trade-off.
+- mandatory queue kept outside the trade-off;
+- a budget frontier showing the marginal benefit of additional CAPEX.
+
+### 7. Synthetic demonstration mode
+
+The decision-engine page can run on a deterministic synthetic fleet. This mode is clearly labeled and contains **no Renault or customer data**. It exists so the complete workflow can be demonstrated even when the original workbook does not contain optional production-criticality, failure-history, downtime, safety-severity, or intervention-cost fields.
 
 ## Why this design is defensible
 
@@ -158,13 +163,15 @@ industrial-maintenance-dashboard/
 ├── Accueil.py                   # Streamlit entry point
 ├── utils.py                     # Shared ingestion + engineering utilities
 ├── decision_engine.py           # Explainable risk + CAPEX optimization core
+├── demo_data.py                 # Deterministic synthetic fleet for demonstrations
 ├── Capex pont Roadmap.xlsx      # Existing fleet workbook used by the original app
 ├── requirements.txt
 ├── README.md
 ├── .github/workflows/ci.yml     # Python 3.11 CI
 ├── tests/
 │   ├── test_utils.py
-│   └── test_decision_engine.py
+│   ├── test_decision_engine.py
+│   └── test_demo_data.py
 └── pages/
     ├── 1_Vue_densemble.py       # Fleet overview
     ├── 2_Priorisation.py        # Existing prioritization
@@ -191,7 +198,7 @@ On Windows:
 .venv\Scripts\activate
 ```
 
-Then upload the fleet workbook from the application home page.
+Then upload the fleet workbook from the application home page, or open the Decision Engine page and select the synthetic demonstration mode.
 
 ## Input validation
 
@@ -202,11 +209,11 @@ The dashboard accepts `.xlsx` workbooks up to 20 MB. It prefers a sheet named `P
 GitHub Actions runs the test suite on Python 3.11 for every pull request and every push to `main`.
 
 ```bash
-python -m compileall -q Accueil.py utils.py decision_engine.py pages tests
+python -m compileall -q Accueil.py utils.py decision_engine.py demo_data.py pages tests
 pytest -q
 ```
 
-Tests cover input validation, engineering calculation edge cases, bounded risk scores, evidence coverage, cost provenance, mandatory-cost reservation, optimization constraints, and data-quality reporting.
+Tests cover input validation, engineering calculation edge cases, bounded risk scores, evidence coverage, cost provenance, mandatory-cost reservation, optimization constraints, data-quality reporting, and deterministic synthetic demo generation.
 
 ## How I would validate this before operational use
 
