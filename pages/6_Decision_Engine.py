@@ -20,7 +20,6 @@ st.caption(
     "Explainable engineering prioritization for a multi-site industrial fleet. "
     "The model is deterministic, auditable, and intentionally separates data confidence from risk."
 )
-
 st.info(
     "Decision-support tool only. It does not predict failures and does not replace statutory inspections, "
     "engineering judgement, or certified fitness-for-service decisions."
@@ -30,14 +29,14 @@ source = st.radio(
     "Data source",
     ["Uploaded workbook", "Synthetic demonstration"],
     horizontal=True,
-    help="The synthetic mode demonstrates the complete decision workflow without using customer/company data.",
+    help="Synthetic mode demonstrates the complete workflow without using company/customer data.",
 )
 
 if source == "Synthetic demonstration":
     demo_assets = st.slider("Synthetic fleet size", 20, 120, 60, 10)
     df = build_demo_fleet(n_assets=demo_assets)
     st.success(
-        "Synthetic mode: all operating-history, safety, criticality and cost fields shown below are generated demo data. "
+        "Synthetic mode: operating history, safety, criticality and intervention-cost fields are generated demo data. "
         "No Renault or customer data is used."
     )
 else:
@@ -47,12 +46,13 @@ else:
 register = build_risk_register(df)
 quality = data_quality_report(df)
 
-# -----------------------------------------------------------------------------
-# Executive cockpit
-# -----------------------------------------------------------------------------
-mandatory_count = int(register["mandatory_action"].sum()) if not register.empty else 0
-high_risk_count = int((register["risk_score"] >= 65).sum()) if not register.empty else 0
-median_confidence = float(register["data_confidence"].median()) if not register.empty else 0.0
+if register.empty:
+    st.warning("No valid assets are available for analysis.")
+    st.stop()
+
+mandatory_count = int(register["mandatory_action"].sum())
+high_risk_count = int((register["risk_score"] >= 65).sum())
+median_confidence = float(register["data_confidence"].median())
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Assets", f"{len(register):,}")
@@ -61,8 +61,8 @@ c3.metric("Risk score ≥ 65", f"{high_risk_count:,}")
 c4.metric("Median evidence coverage", f"{median_confidence:.0f}%")
 
 st.caption(
-    "Evidence coverage is the percentage of the intended risk model supported by fields actually present "
-    "for each asset. Missing evidence is not silently imputed."
+    "Evidence coverage is the share of the intended risk model supported by fields actually present for each asset. "
+    "Missing evidence is not silently imputed."
 )
 
 cockpit, quality_tab, scenario_tab, methodology_tab = st.tabs(
@@ -91,23 +91,43 @@ with cockpit:
         st.warning("No assets match the current filters.")
     else:
         chart_df = view.head(30).copy()
-        chart_df["asset"] = chart_df["pont"].astype(str) if "pont" in chart_df.columns else chart_df.index.astype(str)
+        chart_df["asset"] = (
+            chart_df["pont"].astype(str)
+            if "pont" in chart_df.columns
+            else chart_df.index.astype(str)
+        )
+
+        # Plotly's marker-size validator rejects NaN/inf. Cost is optional in the
+        # decision model, so sanitize it only for visualization and retain the
+        # original intervention_cost_eur column for auditability.
+        marker_cost = pd.to_numeric(
+            chart_df.get("intervention_cost_eur", pd.Series(index=chart_df.index, dtype=float)),
+            errors="coerce",
+        )
+        marker_cost = marker_cost.replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(lower=0.0)
+        chart_df["_marker_cost"] = marker_cost
+        size_field = "_marker_cost" if marker_cost.gt(0).any() else None
+
         fig = px.scatter(
             chart_df,
             x="risk_score",
             y="data_confidence",
-            size="intervention_cost_eur" if chart_df["intervention_cost_eur"].fillna(0).gt(0).any() else None,
+            size=size_field,
+            size_max=36,
             color="mandatory_action",
             hover_name="asset",
-            hover_data=[
-                c
-                for c in ["site", "pays", "recommended_action", "risk_drivers", "cost_source"]
-                if c in chart_df.columns
-            ],
+            hover_data={
+                **{
+                    c: True
+                    for c in ["site", "pays", "recommended_action", "risk_drivers", "cost_source", "intervention_cost_eur"]
+                    if c in chart_df.columns
+                },
+                "_marker_cost": False,
+            },
             labels={
                 "risk_score": "Risk score / 100",
                 "data_confidence": "Evidence coverage / 100",
-                "intervention_cost_eur": "Cost (€)",
+                "intervention_cost_eur": "Intervention cost (€)",
                 "mandatory_action": "Mandatory",
             },
             title="Risk versus evidence coverage (top 30 by priority)",
@@ -137,7 +157,9 @@ with cockpit:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "risk_score": st.column_config.ProgressColumn("Risk", min_value=0, max_value=100, format="%.1f"),
+                "risk_score": st.column_config.ProgressColumn(
+                    "Risk", min_value=0, max_value=100, format="%.1f"
+                ),
                 "data_confidence": st.column_config.ProgressColumn(
                     "Evidence", min_value=0, max_value=100, format="%.1f%%"
                 ),
@@ -158,7 +180,7 @@ with cockpit:
         a3.metric("Mandatory", "Yes" if bool(r["mandatory_action"]) else "No")
         st.markdown(f"**Recommended action:** {r['recommended_action']}")
         st.markdown(f"**Main drivers:** {r['risk_drivers']}")
-        if pd.notna(r["intervention_cost_eur"]):
+        if pd.notna(r.get("intervention_cost_eur")):
             st.markdown(
                 f"**Cost used for scenario planning:** €{r['intervention_cost_eur']:,.0f} ({r['cost_source']})"
             )
@@ -230,8 +252,8 @@ with quality_tab:
 with scenario_tab:
     st.subheader("Budget-constrained intervention portfolio")
 
-    known_costs = register["intervention_cost_eur"].dropna()
-    known_cost_sum = float(known_costs.sum()) if not known_costs.empty else 0.0
+    known_costs = pd.to_numeric(register["intervention_cost_eur"], errors="coerce").dropna()
+    known_cost_sum = float(known_costs[known_costs > 0].sum()) if not known_costs.empty else 0.0
     suggested_max = int(max(500_000, min(10_000_000, known_cost_sum or 2_000_000)))
     default_budget = int(min(max(250_000, suggested_max // 2), suggested_max))
 
@@ -275,19 +297,12 @@ with scenario_tab:
         mandatory_cols = [
             c
             for c in [
-                "pays",
-                "site",
-                "pont",
-                "risk_score",
-                "recommended_action",
-                "intervention_cost_eur",
-                "cost_source",
+                "pays", "site", "pont", "risk_score", "recommended_action",
+                "intervention_cost_eur", "cost_source",
             ]
             if c in result.mandatory.columns
         ]
-        st.dataframe(
-            result.mandatory[mandatory_cols], use_container_width=True, hide_index=True
-        )
+        st.dataframe(result.mandatory[mandatory_cols], use_container_width=True, hide_index=True)
 
     st.markdown("#### Optimized discretionary portfolio")
     if result.selected.empty:
@@ -296,26 +311,17 @@ with scenario_tab:
         selected_cols = [
             c
             for c in [
-                "pays",
-                "site",
-                "pont",
-                "risk_score",
-                "expected_risk_reduction",
-                "intervention_cost_eur",
-                "cost_source",
-                "recommended_action",
+                "pays", "site", "pont", "risk_score", "expected_risk_reduction",
+                "intervention_cost_eur", "cost_source", "recommended_action",
             ]
             if c in result.selected.columns
         ]
-        st.dataframe(
-            result.selected[selected_cols], use_container_width=True, hide_index=True
-        )
+        st.dataframe(result.selected[selected_cols], use_container_width=True, hide_index=True)
 
     st.markdown("#### Budget frontier")
     frontier_max = max(float(budget), known_cost_sum, 250_000.0)
-    frontier_budgets = np.linspace(0, frontier_max, 9)
     frontier_rows = []
-    for scenario_budget in frontier_budgets:
+    for scenario_budget in np.linspace(0, frontier_max, 9):
         scenario = optimize_capex(
             register,
             float(scenario_budget),
@@ -340,7 +346,7 @@ with scenario_tab:
 
     st.caption(
         f"Optimization uses a 0/1 knapsack model with a €{result.budget_quantum_eur:,} budget quantum. "
-        "Therefore it is exact at that discretization level, not at single-euro precision."
+        "It is therefore exact at that discretization level, not at single-euro precision."
     )
 
 with methodology_tab:
@@ -349,49 +355,55 @@ with methodology_tab:
         """
 **1. Evidence first.** The engine uses only signals present in the dataset. Missing signals are not treated as healthy assets.
 
-**2. Risk and confidence are separate.** A high risk score with low evidence means “investigate urgently”, not “the model knows the truth”.
+**2. Risk and confidence are separate.** A high-risk, low-evidence item means “investigate”, not “the model knows the truth”.
 
-**3. Deterministic and explainable.** Each score is a weighted combination of interpretable engineering signals. The top drivers are shown at asset level.
+**3. Deterministic and explainable.** Each score is a weighted combination of interpretable engineering signals and the main drivers are exposed.
 
-**4. Safety is not optimized away.** Mandatory compliance actions are kept outside the economic trade-off.
+**4. Safety is not optimized away.** Mandatory compliance actions stay outside the discretionary economic trade-off.
 
-**5. CAPEX is scenario planning, not prediction.** The optimizer maximizes an assumed reduction in risk points subject to the available budget. The intervention-effectiveness assumption is visible and editable.
+**5. CAPEX is scenario planning, not prediction.** The optimizer maximizes an assumed reduction in risk points subject to a budget. The effectiveness assumption is visible and editable.
         """
     )
 
     st.markdown("#### Base weights")
-    weights_df = pd.DataFrame(
-        {
-            "Signal": [
-                "Compliance / EVS",
-                "Safety severity",
-                "Production criticality",
-                "Failure frequency",
-                "Unplanned downtime",
-                "Equipment age",
-            ],
-            "Weight (%)": [30, 25, 15, 10, 10, 10],
-        }
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "Signal": [
+                    "Compliance / EVS",
+                    "Safety severity",
+                    "Production criticality",
+                    "Failure frequency",
+                    "Unplanned downtime",
+                    "Equipment age",
+                ],
+                "Weight (%)": [30, 25, 15, 10, 10, 10],
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
     )
-    st.dataframe(weights_df, use_container_width=True, hide_index=True)
 
     st.markdown("#### Transparent normalization assumptions")
-    assumptions_df = pd.DataFrame(
-        [
-            ["Age", "50 years → 100/100", "Clipped at 100; calibrate to fleet context"],
-            ["Failures", "5 failures / 12 months → 100/100", "Simple monotonic scaling, not a probability"],
-            ["Downtime", "100 h / 12 months → 100/100", "Simple monotonic scaling, not financial loss"],
-            ["Production criticality", "1–5 ordinal scale", "5 maps to 100/100"],
-            ["Safety severity", "None/Low/Medium/Major/Critical", "Ordinal engineering input"],
-            ["Compliance", "EVS / compliance status", "Explicit mandatory states are flagged"],
-        ],
-        columns=["Signal", "Current mapping", "Interpretation"],
+    st.dataframe(
+        pd.DataFrame(
+            [
+                ["Age", "50 years → 100/100", "Clipped at 100; calibrate to fleet context"],
+                ["Failures", "5 failures / 12 months → 100/100", "Monotonic scaling, not a probability"],
+                ["Downtime", "100 h / 12 months → 100/100", "Monotonic scaling, not financial loss"],
+                ["Production criticality", "1–5 ordinal scale", "5 maps to 100/100"],
+                ["Safety severity", "None/Low/Medium/Major/Critical", "Ordinal engineering input"],
+                ["Compliance", "EVS / compliance status", "Mandatory states are flagged explicitly"],
+            ],
+            columns=["Signal", "Current assumption", "Interpretation"],
+        ),
+        use_container_width=True,
+        hide_index=True,
     )
-    st.dataframe(assumptions_df, use_container_width=True, hide_index=True)
 
     st.markdown("#### Important limitations")
     st.write(
-        "Weights and normalization thresholds are engineering assumptions and should be calibrated with plant experts "
-        "and retrospective data before operational use. The model does not estimate failure probability, remaining life, "
-        "or financial return unless those quantities are independently supplied and validated."
+        "Weights and normalization thresholds are engineering assumptions. Before operational use they should be calibrated "
+        "with plant experts and retrospective cases. The model does not estimate failure probability, certified remaining life, "
+        "or guaranteed financial return."
     )
