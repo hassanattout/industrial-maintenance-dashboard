@@ -21,6 +21,6 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Compile Python sources
-        run: python -m compileall -q Accueil.py utils.py pages tests
+        run: python -m compileall -q Accueil.py utils.py decision_engine.py demo_data.py pages tests
       - name: Run tests
         run: pytest -q
